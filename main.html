@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Карта литературных топонимов</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+:root{
+  --ink:#1a1410;--parchment:#f5f0e8;--sepia:#c8a96e;
+  --rust:#9b3a2a;--sage:#4a6741;--mist:#e8e2d6;
+  --panel:#faf7f2;--shadow:rgba(26,20,16,0.12);
+  --col-real:#4a6741;--col-fict:#6b4f8a;--col-bio:#9b3a2a;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Cormorant Garamond',Georgia,serif;background:var(--parchment);color:var(--ink);height:100vh;display:flex;flex-direction:column;overflow:hidden;}
+
+header{display:flex;align-items:center;gap:1rem;padding:0.6rem 1.3rem;background:var(--ink);color:var(--parchment);border-bottom:2px solid var(--sepia);flex-shrink:0;z-index:1000;}
+header h1{font-size:1.15rem;font-weight:600;letter-spacing:0.03em;}
+header .sub{font-style:italic;font-size:0.82rem;color:var(--sepia);margin-left:auto;}
+
+.workspace{display:flex;flex:1;overflow:hidden;}
+
+/* Panel */
+.panel{width:320px;min-width:240px;background:var(--panel);border-right:1px solid var(--mist);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;}
+.psec{padding:0.7rem 1rem 0.5rem;border-bottom:1px solid var(--mist);flex-shrink:0;}
+.psec h2{font-size:0.61rem;font-family:'JetBrains Mono',monospace;letter-spacing:0.12em;text-transform:uppercase;color:var(--sepia);margin-bottom:0.4rem;}
+
+/* Selects */
+.dsel{width:100%;padding:0.36rem 1.7rem 0.36rem 0.58rem;border:1px solid var(--mist);border-radius:3px;background:white url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23c8a96e' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right 0.5rem center;appearance:none;font-family:'Cormorant Garamond',serif;font-size:0.95rem;color:var(--ink);outline:none;cursor:pointer;transition:border-color 0.15s;}
+.dsel:focus{border-color:var(--sepia);}
+.dsel:disabled{opacity:0.45;cursor:not-allowed;}
+
+/* Mode tabs */
+.mtabs{display:flex;border:1px solid var(--mist);border-radius:3px;overflow:hidden;}
+.mtab{flex:1;padding:0.36rem 0;text-align:center;font-family:'JetBrains Mono',monospace;font-size:0.63rem;letter-spacing:0.04em;cursor:pointer;background:white;color:#7a6a55;border:none;transition:all 0.14s;}
+.mtab+.mtab{border-left:1px solid var(--mist);}
+.mtab:disabled{opacity:0.38;cursor:not-allowed;}
+.mtab.abio{background:var(--col-bio);color:white;}
+.mtab.awork{background:var(--col-real);color:white;}
+
+/* Filters */
+.frow{display:flex;gap:0.28rem;flex-wrap:wrap;}
+.fb{font-family:'JetBrains Mono',monospace;font-size:0.59rem;padding:0.14rem 0.44rem;border:1px solid currentColor;border-radius:2px;cursor:pointer;background:transparent;transition:all 0.12s;letter-spacing:0.03em;}
+.fb.fall{color:var(--ink);}
+.fb.freal{color:var(--col-real);}
+.fb.ffict{color:var(--col-fict);}
+.fb.active{color:var(--parchment)!important;}
+.fb.fall.active{background:var(--ink);border-color:var(--ink);}
+.fb.freal.active{background:var(--col-real);border-color:var(--col-real);}
+.fb.ffict.active{background:var(--col-fict);border-color:var(--col-fict);}
+
+/* Search */
+.sbox{width:100%;padding:0.34rem 0.58rem;border:1px solid var(--mist);border-radius:3px;background:white;font-family:'JetBrains Mono',monospace;font-size:0.73rem;color:var(--ink);outline:none;}
+.sbox:focus{border-color:var(--sepia);}
+
+/* Entity list */
+.elist{flex:1;overflow-y:auto;padding:0.15rem 0;}
+.elist::-webkit-scrollbar{width:4px;}
+.elist::-webkit-scrollbar-thumb{background:var(--mist);border-radius:2px;}
+.eitem{padding:0.4rem 1rem;cursor:pointer;border-bottom:1px solid var(--mist);transition:background 0.12s;}
+.eitem:hover{background:var(--mist);}
+.eitem.active{background:#ede8df;}
+.ename{font-size:0.94rem;font-weight:600;line-height:1.2;}
+.emeta{display:flex;gap:0.32rem;margin-top:0.12rem;align-items:center;flex-wrap:wrap;}
+.tag{font-family:'JetBrains Mono',monospace;font-size:0.55rem;padding:0.04rem 0.26rem;border-radius:2px;letter-spacing:0.05em;text-transform:uppercase;}
+.treal{background:#e8f0e7;color:var(--col-real);border:1px solid var(--col-real);}
+.tfict{background:#ede8f5;color:var(--col-fict);border:1px solid var(--col-fict);}
+.tbio{background:#f5e8e8;color:var(--col-bio);border:1px solid var(--col-bio);}
+.tyear{background:#f5f0e8;color:var(--sepia);border:1px solid var(--sepia);}
+.tcnt{font-family:'JetBrains Mono',monospace;font-size:0.59rem;color:#a09080;margin-left:auto;}
+.esent{font-size:0.73rem;color:#7a6a55;font-style:italic;margin-top:0.14rem;line-height:1.26;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.empty{text-align:center;padding:1.6rem 1rem;color:#a09080;font-style:italic;font-size:0.88rem;}
+
+/* Stats */
+.sbar{padding:0.36rem 1rem;border-top:1px solid var(--mist);font-family:'JetBrains Mono',monospace;font-size:0.59rem;color:#a09080;display:flex;gap:0.55rem;flex-wrap:wrap;flex-shrink:0;}
+.sbar b{color:var(--ink);}
+
+/* Map */
+.mwrap{position:relative;flex:1;}
+#map{width:100%;height:100%;}
+
+/* Legend */
+.legend{position:absolute;bottom:28px;right:10px;z-index:900;background:var(--panel);border:1px solid var(--mist);border-radius:4px;padding:0.5rem 0.7rem;box-shadow:0 2px 8px var(--shadow);font-size:0.72rem;}
+.legend h4{font-family:'JetBrains Mono',monospace;font-size:0.56rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--sepia);margin-bottom:0.36rem;}
+.li{display:flex;align-items:center;gap:0.4rem;margin-bottom:0.22rem;}
+.ldot{width:11px;height:11px;border-radius:50%;flex-shrink:0;}
+.lline{width:22px;height:0;flex-shrink:0;border-top:2px dashed var(--col-bio);}
+.larr{font-size:0.8rem;color:var(--col-bio);}
+
+/* Sidebar detail */
+.detail{position:absolute;bottom:0;left:0;right:0;background:var(--panel);border-top:2px solid var(--sepia);padding:0.7rem 1rem;max-height:45%;overflow-y:auto;transform:translateY(100%);transition:transform 0.25s ease;z-index:50;display:none;}
+.detail.open{transform:translateY(0);}
+.dclose{position:absolute;top:0.5rem;right:0.7rem;font-family:'JetBrains Mono',monospace;font-size:0.65rem;cursor:pointer;color:var(--sepia);}
+.dtitle{font-size:1.05rem;font-weight:600;margin-bottom:0.15rem;}
+.dmeta{font-family:'JetBrains Mono',monospace;font-size:0.62rem;color:var(--sepia);margin-bottom:0.5rem;}
+.dctx{font-size:0.85rem;font-style:italic;line-height:1.5;color:#555;border-left:3px solid var(--sepia);padding-left:0.65rem;}
+
+/* Popup */
+.leaflet-popup-content-wrapper{border-radius:3px;font-family:'Cormorant Garamond',serif;box-shadow:0 4px 16px var(--shadow);max-width:280px;}
+.ptitle{font-size:0.96rem;font-weight:600;}
+.pmeta{font-family:'JetBrains Mono',monospace;font-size:0.6rem;color:#7a6a55;margin:0.13rem 0 0.24rem;}
+.psent{font-style:italic;font-size:0.8rem;color:#555;border-top:1px solid #eee;padding-top:0.28rem;margin-top:0.28rem;line-height:1.38;}
+</style>
+</head>
+<body>
+
+<header>
+  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--sepia)" stroke-width="1.8">
+    <path d="M3 6l9-3 9 3v13l-9 3-9-3V6z"/><path d="M12 3v16M3 6l9 3 9-3"/>
+  </svg>
+  <h1>Карта литературных топонимов</h1>
+  <span class="sub">прототип · Гоголь Н.В.</span>
+</header>
+
+<div class="workspace">
+  <div class="panel">
+
+    <!-- Писатель -->
+    <div class="psec">
+      <h2>Писатель</h2>
+      <select class="dsel" id="authorSel" onchange="onAuthorChange()">
+        <option value="gogol">Гоголь Н.В.</option>
+        <option value="" disabled>— в разработке —</option>
+      </select>
+    </div>
+
+    <!-- Режим: биография / произведение -->
+    <div class="psec">
+      <h2>Раздел</h2>
+      <div class="mtabs">
+        <button class="mtab" id="tabBio"  onclick="setMode('bio')">Биография</button>
+        <button class="mtab" id="tabWork" onclick="setMode('work')">Произведение</button>
+      </div>
+    </div>
+
+    <!-- Произведение (только в режиме work) -->
+    <div class="psec" id="workSec" style="display:none">
+      <h2>Произведение</h2>
+      <select class="dsel" id="workSel" onchange="onWorkChange()">
+        <option value="Шинель">Шинель</option>
+        <option value="Тарас Бульба">Тарас Бульба</option>
+      </select>
+    </div>
+
+    <!-- Фильтр -->
+    <div class="psec">
+      <h2>Тип топонима</h2>
+      <div class="frow" id="filterRow">
+        <button class="fb fall active" data-f="all">Все</button>
+        <button class="fb freal"       data-f="real">Существующие</button>
+        <button class="fb ffict"       data-f="fictional_pure">Вымышленные</button>
+      </div>
+    </div>
+
+    <!-- Поиск -->
+    <div class="psec">
+      <h2>Поиск</h2>
+      <input class="sbox" id="searchBox" type="text" placeholder="Найти топоним…">
+    </div>
+
+    <!-- Список -->
+    <div class="elist" id="entityList">
+      <div class="empty">Выберите раздел</div>
+    </div>
+
+    <div class="sbar">
+      <span><b id="sTotal">0</b> топонимов</span>
+      <span><b id="sReal">0</b> реальных</span>
+      <span><b id="sFict">0</b> вымышленных</span>
+    </div>
+  </div>
+
+  <div class="mwrap">
+    <div id="map"></div>
+    <div class="legend">
+      <h4>Легенда</h4>
+      <div class="li"><div class="ldot" style="background:var(--col-real)"></div><span>Существующий топоним</span></div>
+      <div class="li"><div class="ldot" style="background:var(--col-fict)"></div><span>Вымышленный топоним</span></div>
+      <div class="li"><div class="ldot" style="background:var(--col-bio)"></div><span>Биографический топоним</span></div>
+      <div class="li"><div class="lline"></div><span class="larr">→</span><span>Хронологический маршрут</span></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Данные
+const GOGOL = {"biography": [{"entity_text": "Сорочинец", "fictional_type": "real", "source_type": "biography", "work_title": "Биография", "year": null, "count": 1, "sentences": ["\"Николай Гоголь родился в селе Сорочинцы Полтавской губернии, которая на тот момент входила в состав Российской империи\""], "sections": [], "lat": 49.97, "lon": 33.97, "geocoded": true}, {"entity_text": "Полтавский губерния", "fictional_type": "real", "source_type": "biography", "work_title": "Биография", "year": null, "count": 1, "sentences": ["\"Николай Гоголь родился в селе Сорочинцы Полтавской губернии, которая на тот момент входила в состав Российской империи\""], "sections": [], "lat": 49.59, "lon": 34.54, "geocoded": true}, {"entity_text": "Российский империя", "fictional_type": "real", "source_type": "biography", "work_title": "Биография", "year": null, "count": 1, "sentences": ["\"Николай Гоголь родился в селе Сорочинцы Полтавской губернии, которая на тот момент входила в состав Российской империи\""], "sections": [], "lat": 55.75, "lon": 37.62, "geocoded": true}, {"entity_text": "Полтава", "fictional_type": "real", "source_type": "biography", "work_title": "Биография", "year": null, "count": 1, "sentences": ["\"Когда Гоголю исполнилось десять лет, родители привезли его в Полтаву, к одному из преподавателей местной гимназии\""], "sections": [], "lat": 49.59, "lon": 34.54, "geocoded": true}, {"entity_text": "Нежин", "fictional_type": "real", "source_type": "biography", "work_title": "Биография", "year": null, "count": 1, "sentences": ["\"Его мать вспоминала:«Я детям не могла писать о нашем несчастии и просила письменно директора в Нежине приготовить к такому удару моего сына\";\" он в таком был горе, что хотел броситься в окно с верхнего этажа»\""], "sections": [], "lat": 51.05, "lon": 31.89, "geocoded": true}, {"entity_text": "Швейцария", "fictional_type": "real", "source_type": "biography", "work_title": "Биография", "year": null, "count": 1, "sentences": ["\"Он побывал в Швейцарии, затем переехал в Париж\""], "sections": [], "lat": 46.82, "lon": 8.23, "geocoded": true}, {"entity_text": "Париж", "fictional_type": "real", "source_type": "biography", "work_title": "Биография", "year": null, "count": 1, "sentences": ["\"Он побывал в Швейцарии, затем переехал в Париж\""], "sections": [], "lat": 48.86, "lon": 2.35, "geocoded": true}, {"entity_text": "Москва", "fictional_type": "real", "source_type": "biography", "work_title": "Биография", "year": "1841", "count": 1, "sentences": ["\"Там в 1841 году он закончил первый том романа «Мертвые души» и, чтобы напечатать произведение, через несколько месяцев вернулся в Москву\""], "sections": [], "lat": 55.75, "lon": 37.62, "geocoded": true}, {"entity_text": "Рим", "fictional_type": "real", "source_type": "biography", "work_title": "Биография", "year": null, "count": 1, "sentences": ["\"Рим, Дюссельдорф, Ницца, Париж — писатель часто переезжал\""], "sections": [], "lat": 41.9, "lon": 12.5, "geocoded": true}, {"entity_text": "Дюссельдорф", "fictional_type": "real", "source_type": "biography", "work_title": "Биография", "year": null, "count": 1, "sentences": ["\"Рим, Дюссельдорф, Ницца, Париж — писатель часто переезжал\""], "sections": [], "lat": 51.23, "lon": 6.79, "geocoded": true}, {"entity_text": "Ницца", "fictional_type": "real", "source_type": "biography", "work_title": "Биография", "year": null, "count": 1, "sentences": ["\"Рим, Дюссельдорф, Ницца, Париж — писатель часто переезжал\""], "sections": [], "lat": 43.71, "lon": 7.26, "geocoded": true}, {"entity_text": "Иерусалим", "fictional_type": "real", "source_type": "biography", "work_title": "Биография", "year": "1848", "count": 1, "sentences": ["\"Практически перестал писать друзьям, а в 1848 году отправился в Иерусалим\""], "sections": [], "lat": 31.77, "lon": 35.21, "geocoded": true}, {"entity_text": "Петербург", "fictional_type": "real", "source_type": "biography", "work_title": "Биография", "year": null, "count": 1, "sentences": ["\"Поэт Нестор Кукольник вспоминал:«Однажды, уже в Петербурге, один из товарищей при мне спросил Гоголя: «С чего ты это переменил фамилию\""], "sections": [], "lat": 59.93, "lon": 30.32, "geocoded": true}], "Шинель": [{"entity_text": "Калинкин мост", "fictional_type": "real", "source_type": "work", "work_title": "Шинель", "year": null, "count": 2, "sentences": ["По Петербургу пронеслись вдруг слухи, что у Калинкина моста и далеко подальше стал показываться по ночам мертвец в виде чиновника, ищущего какой-то утащенной шинели и под видом стащенной шинели сдирающий со всех плеч, не разбирая чина и звания, всякие шинели: на кошках, на бобрах, на вате, енотовые, лисьи, медвежьи шубы – словом, всякого рода меха и кожи, какие только придумали люди для прикрытия собственной.", "С этих пор будочники получили такой страх к мертвецам, что даже опасались хватать и живых, и только издали покрикивали: «Эй, ты, ступай своею дорогою!» – и мертвец-чиновник стал показываться даже за Калинкиным мостом, наводя немалый страх на всех робких людей."], "sections": [], "lat": 59.92, "lon": 30.28, "geocoded": true}, {"entity_text": "Кирюшкино переулок", "fictional_type": "fictional_pure", "source_type": "work", "work_title": "Шинель", "year": null, "count": 1, "sentences": ["Именно булочник какого-то квартала в Кирюшкином переулке схватил было уже совершенно мертвеца за ворот на самом месте злодеяния, на покушении сдернуть фризовую шинель с какого-то отставного музыканта, свиставшего в свое время на флейте."], "sections": [], "lat": 59.93, "lon": 30.32, "geocoded": true}, {"entity_text": "Невский проспект", "fictional_type": "real", "source_type": "work", "work_title": "Шинель", "year": null, "count": 1, "sentences": ["Петрович не упустил при сем случае сказать, что он так только, потому что живет без вывески на небольшой улице и притом давно знает Акакия Акакиевича, потому взял так дешево; а на Невском проспекте с него бы взяли за одну только работу семьдесят пять рублей."], "sections": [], "lat": 59.93, "lon": 30.33, "geocoded": true}, {"entity_text": "Обух мост", "fictional_type": "fictional_pure", "source_type": "work", "work_title": "Шинель", "year": null, "count": 1, "sentences": ["Привидение, однако же, было уже гораздо выше ростом, носило преогромные усы и, направив шаги, как казалось, к Обухову мосту, скрылось совершенно в ночной темноте."], "sections": [], "lat": 59.92, "lon": 30.34, "geocoded": true}, {"entity_text": "Петербург", "fictional_type": "real", "source_type": "work", "work_title": "Шинель", "year": null, "count": 4, "sentences": ["Есть в Петербурге сильный враг всех, получающих четыреста рублей в год жалованья или около того.", "Где именно жил пригласивший чиновник, к сожалению, не можем сказать: память начинает нам сильно изменять, и всь, что ни есть в Петербурге, все улицы и домы слились и смешались так в голове, что весьма трудно достать оттуда что-нибудь в порядочном виде.", "И Петербург остался без Акакия Акакиевича, как будто бы в нем его и никогда не было."], "sections": [], "lat": 59.93, "lon": 30.32, "geocoded": true}, {"entity_text": "Русь", "fictional_type": "real", "source_type": "work", "work_title": "Шинель", "year": null, "count": 1, "sentences": ["Так уж на святой Руси все заражено подражанием, всякий дразнит и корчит своего начальника."], "sections": [], "lat": 55.75, "lon": 37.62, "geocoded": true}], "Тарас Бульба": [{"entity_text": "Адрианополь", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["Следом  за  ними  выехал  и  Демид Попович,  коренастый  козак,  уже  давно  маячивший  на  Сечи,  бывший   под Адрианополем и много натерпевшийся на веку своем: горел в огне и прибежал на Сечь с обсмаленною, почерневшею головою и выгоревшими  усами."], "sections": ["Разделяйся же на три кучи и становись на три дороги  перед  тремя  воротами."], "lat": 41.68, "lon": 26.56, "geocoded": true}, {"entity_text": "Азия", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["Появление  иностранных  графов  и  баронов  было  в   Польше   довольно обыкновенно: они часто были завлекаемы единственно  любопытством  посмотреть этот почти полуазиатский угол Европы: Московию и Украйну  они  почитали  уже находящимися в Азии."], "sections": ["Разделяйся же на три кучи и становись на три дороги  перед  тремя  воротами."], "lat": 39.0, "lon": 35.0, "geocoded": true}, {"entity_text": "Андрий", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 2, "sentences": ["Но более всего произвела  впечатленья  на Андрия страшная казнь, определенная за  смертоубийство.", "Вспомнил он, что велика власть слабой женщины, что многих сильных погубляла она,  что  податлива  с  этой  стороны  природа Андрия; и стоял он долго как вкопанный на одном и том же месте."], "sections": [], "lat": 50.45, "lon": 30.52, "geocoded": true}, {"entity_text": "Батурин", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["Отвсюду  поднялись  козаки:  от   Чигирина,   от Переяслава, от Батурина, от Глухова, от низовой  стороны  днепровской  и  от всех его верховий и островов."], "sections": ["Часть военных всадников бросилась заботливо рассматривать толпы народа."], "lat": 51.34, "lon": 32.87, "geocoded": true}, {"entity_text": "Буджак", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["- Да, может быть, воевода и сдал бы, но вчера утром полковник,  который в Буджаках, пустил в город ястреба с запиской, чтобы не отдавали города; что он идет на выручку с полком, да ожидает только другого полковника, чтоб идти обоим вместе."], "sections": [], "lat": 45.6, "lon": 29.5, "geocoded": true}, {"entity_text": "Варшава", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 8, "sentences": ["- А так, что уж теперь гетьман,  заваренный  в  медном  быке,  лежит  в Варшаве, а полковничьи руки и головы  развозят  по  ярмаркам  напоказ  всему народу.", "Вези меня в Варшаву.", "- В Варшаву?"], "sections": [], "lat": 52.23, "lon": 21.01, "geocoded": true}, {"entity_text": "Везувий", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["Они были похожи на тех, которые селились у  подошвы  Везувия,  потому что как только у запорожцев не ставало денег, то удалые разбивали их лавочки и брали всегда даром."], "sections": [], "lat": 40.82, "lon": 14.43, "geocoded": true}, {"entity_text": "Глухов", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 2, "sentences": ["Не  одна  останется  вдова  в  Глухове,  Немирове, Чернигове и других городах.", "Отвсюду  поднялись  козаки:  от   Чигирина,   от Переяслава, от Батурина, от Глухова, от низовой  стороны  днепровской  и  от всех его верховий и островов."], "sections": ["Разделяйся же на три кучи и становись на три дороги  перед  тремя  воротами."], "lat": 51.68, "lon": 33.91, "geocoded": true}, {"entity_text": "Грязный", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["Янкель, подпрыгивая на своем коротком, запачканном  пылью  рысаке,  поворотил,  сделавши  несколько кругов,  в  темную  узенькую  улицу,  носившую  название  Грязной  и  вместе Жидовской, потому что здесь действительно  находились  жиды  почти  со  всей Варшавы."], "sections": ["Разделяйся же на три кучи и становись на три дороги  перед  тремя  воротами."], "lat": 59.93, "lon": 30.32, "geocoded": true}, {"entity_text": "Днепр", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 11, "sentences": ["По  временам только в стороне синели верхушки отдаленного леса,  тянувшегося  по  берегам Днепра.", "Они прискакали к небольшой речке,  называвшейся  Татаркою,  впадающей  в  Днепр, кинулись в воду с конями своими и долго плыли  по  ней.", "В воздухе вдруг захолодело; они почувствовали близость Днепра."], "sections": [], "lat": 48.46, "lon": 35.04, "geocoded": true}, {"entity_text": "Днестр", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 5, "sentences": ["Но Потоцкий  на сей раз был достоин возложенного поручения; неутомимо преследовал  он  их  и настиг  на  берегу  Днестра,  где  Бульба  занял  для  роздыха   оставленную развалившуюся крепость.", "- говорил он отчаянно  и  взглянул вниз,  где  сверкал  Днестр.", "- сказали все, остановились  на  миг, подняли свои нагайки, свистнули - и татарские их кони, отделившись от земли, распластавшись в воздухе, как змеи, перелетели через пропасть  и  бултыхнули прямо в Днестр."], "sections": ["Часть военных всадников бросилась заботливо рассматривать толпы народа."], "lat": 46.2, "lon": 30.35, "geocoded": true}, {"entity_text": "Днестр - река", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["Над самой кручей у Днестра-реки виднелась она своим оборванным валом  и своими развалившимися останками стен."], "sections": ["Часть военных всадников бросилась заботливо рассматривать толпы народа."], "lat": 46.2, "lon": 30.35, "geocoded": true}, {"entity_text": "Дубна", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["Он уже полтора  года  как  сидит воеводой в Дубне."], "sections": [], "lat": 50.41, "lon": 25.74, "geocoded": true}, {"entity_text": "Дубно", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 2, "sentences": ["Войско решилось идти прямо на город Дубно, где,  носились  слухи,  было много казны и  богатых  обывателей.", "Один  только  козак,  Максим Голодуха, вырвался дорогою из татарских рук, заколол мирзу, отвязал  у  него мешок с цехинами и на татарском коне, в татарской одежде полтора дни  и  две ночи уходил от погони, загнал насмерть коня,  пересел  дорогою  на  другого, загнал и того, и уже на третьем приехал в  запорожский  табор,  разведав  на дороге, что запорожцы были под Дубном."], "sections": [], "lat": 50.41, "lon": 25.74, "geocoded": true}, {"entity_text": "Европа", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 2, "sentences": ["Это был один из тех характеров, которые могли возникнуть только в тяжелый ХV век на полукочующем углу  Европы,  когда  вся южная первобытная Россия,  оставленная  своими  князьями,  была  опустошена, выжжена дотла неукротимыми набегами монгольских хищников;  когда,  лишившись дома и кровли, стал здесь  отважен  человек;  когда  на  пожарищах,  в  виду грозных соседей и вечной опасности, селился он и привыкал глядеть им прямо в очи, разучившись знать, существует ли какая боязнь на свете;  когда  бранным пламенем объялся древле  мирный  славянский  дух  и  завелось  козачество  - широкая,  разгульная  замашка  русской  природы,  -  и  когда  все  поречья, перевозы, прибрежные пологие и удобные места усеялись  козаками,  которым  и счету никто не ведал, и смелые товарищи их  были  вправе  отвечать  султану, пожелавшему знать о числе их: \"Кто их знает!", "Уже известно всем из истории, как их вечная борьба и беспокойная жизнь спасли Европу от  неукротимых  набегов, грозивших ее опрокинуть."], "sections": [], "lat": 54.0, "lon": 15.0, "geocoded": true}, {"entity_text": "Европы:", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["Появление  иностранных  графов  и  баронов  было  в   Польше   довольно обыкновенно: они часто были завлекаемы единственно  любопытством  посмотреть этот почти полуазиатский угол Европы: Московию и Украйну  они  почитали  уже находящимися в Азии."], "sections": ["Разделяйся же на три кучи и становись на три дороги  перед  тремя  воротами."], "lat": 54.0, "lon": 15.0, "geocoded": true}, {"entity_text": "Жидовский", "fictional_type": "fictional_pure", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["Янкель, подпрыгивая на своем коротком, запачканном  пылью  рысаке,  поворотил,  сделавши  несколько кругов,  в  темную  узенькую  улицу,  носившую  название  Грязной  и  вместе Жидовской, потому что здесь действительно  находились  жиды  почти  со  всей Варшавы."], "sections": ["Разделяйся же на три кучи и становись на три дороги  перед  тремя  воротами."], "lat": 50.45, "lon": 30.52, "geocoded": true}, {"entity_text": "Запорожский Сечь", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 2, "sentences": ["Гости поздравили и Бульбу, и обоих юношей и сказали им, что доброе дело  делают  и что нет лучшей науки для молодого человека, как Запорожская Сечь.", "Скакал без отдыху дни и ночи и привез  его, бесчувственного, в самую  Запорожскую  Сечь."], "sections": [], "lat": 47.83, "lon": 35.09, "geocoded": true}, {"entity_text": "Запорожье", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 10, "sentences": ["- А вот, лучше, я вас на той же неделе отправлю  на  Запорожье.", "Я  так  поеду  с  вами  на Запорожье,  погулять.", "Она  терпела оскорбления, даже побои; она видела из милости только оказываемые ласки, она была какое-то странное существо в этом сборище безженных рыцарей, на которых разгульное  Запорожье  набрасывало  суровый  колорит  свой."], "sections": [], "lat": 47.84, "lon": 35.14, "geocoded": true}, {"entity_text": "Запорожья:", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["Кошевой  испугался;  он  ничуть  не  хотел  подымать  всего  Запорожья: разорвать мир ему казалось в этом случае делом неправым."], "sections": [], "lat": 47.84, "lon": 35.14, "geocoded": true}, {"entity_text": "Израиль", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["Бедные сыны Израиля, растерявши  все  присутствие  своего  и  без  того мелкого духа,  прятались  в  пустых  горелочных  бочках,  в  печках  и  даже заползывали под юбки своих жидовок; но козаки везде их находили."], "sections": [], "lat": 31.05, "lon": 34.85, "geocoded": true}, {"entity_text": "Канев", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["Немного  времени  спустя,  после  вероломного поступка под Каневом, вздернута  была  голова  гетьмана  на  кол  вместе  со многими из первейших сановников."], "sections": ["Часть военных всадников бросилась заботливо рассматривать толпы народа."], "lat": 49.75, "lon": 31.47, "geocoded": true}, {"entity_text": "Каневский", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["Один  за  другим  валили  курени:  Уманский, Поповичевский,   Каневский,   Стебликивский,    Незамайковский,    Гургузив, Тытаревский, Тымошевский."], "sections": ["Разделяйся же на три кучи и становись на три дороги  перед  тремя  воротами."], "lat": 49.75, "lon": 31.47, "geocoded": true}, {"entity_text": "Каневский курень", "fictional_type": "fictional_pure", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["Захотели  остаться:  весь  почти  Незамайковский  курень, бо'льшая  половина  Поповичевского  куреня,  весь  Уманский   курень,   весь Каневский курень, бо'льшая половина Стебликивского куреня, бо'льшая половина Тымошевского куреня."], "sections": ["Разделяйся же на три кучи и становись на три дороги  перед  тремя  воротами."], "lat": 49.75, "lon": 31.47, "geocoded": true}, {"entity_text": "Киев", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 4, "sentences": ["Голодная  бурса рыскала по улицам  Киева  и  заставляла  всех  быть  осторожными.", "Вообще  в  последние  годы  он  реже  являлся  предводителем какой-нибудь ватаги, но чаще бродил один где-нибудь  в  уединенном  закоулке Киева, потопленном в вишневых  садах,  среди  низеньких  домиков,  заманчиво глядевших на улицу.", "Иногда он забирался и в улицу аристократов,  в  нынешнем старом Киеве, где  жили  малороссийские  и  польские  дворяне  и  домы  были выстроены с некоторою прихотливостию."], "sections": [], "lat": 50.45, "lon": 30.52, "geocoded": true}, {"entity_text": "Киеве...", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["- Два года назад... в Киеве... - повторил  Андрий,  стараясь  перебрать все, что уцелело в его памяти от прежней бурсацкой жизни."], "sections": [], "lat": 50.45, "lon": 30.52, "geocoded": true}, {"entity_text": "Корсунский курень", "fictional_type": "fictional_pure", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["Дядькивский и Корсунский курень на  засаду!"], "sections": ["Разделяйся же на три кучи и становись на три дороги  перед  тремя  воротами."], "lat": 49.43, "lon": 31.26, "geocoded": true}, {"entity_text": "Краков", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["А Тарас гулял по всей  Польше  с  своим  полком,  выжег восемнадцать местечек, близ сорока костелов и уже доходил до Кракова."], "sections": ["Часть военных всадников бросилась заботливо рассматривать толпы народа."], "lat": 50.06, "lon": 19.94, "geocoded": true}, {"entity_text": "Критский остров", "fictional_type": "fictional_pure", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["В подобных случаях водилось у запорожцев  гнаться  в  ту  ж  минуту  за похитителями, стараясь настигнуть их на дороге, потому что пленные  как  раз могли очутиться на базарах Малой Азии, в Смирне, на Критском острове, и  бог знает в каких местах не показались бы чубатые запорожские головы."], "sections": ["Разделяйся же на три кучи и становись на три дороги  перед  тремя  воротами."], "lat": 35.24, "lon": 24.81, "geocoded": true}, {"entity_text": "Литва", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["Площадь обступали кругом небольшие каменные и глиняные, в  один этаж, домы с видными в стенах  деревянными  сваями  и  столбами  во  всю  их высоту, косвенно перекрещенные деревянными же брусьями, как  вообще  строили домы тогдашние обыватели, что можно видеть и поныне еще в  некоторых  местах Литвы  и  Польши."], "sections": [], "lat": 55.17, "lon": 23.88, "geocoded": true}, {"entity_text": "Малый Азия", "fictional_type": "fictional_pure", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 2, "sentences": ["В подобных случаях водилось у запорожцев  гнаться  в  ту  ж  минуту  за похитителями, стараясь настигнуть их на дороге, потому что пленные  как  раз могли очутиться на базарах Малой Азии, в Смирне, на Критском острове, и  бог знает в каких местах не показались бы чубатые запорожские головы.", "Двести челнов спущены  были в Днепр, и Малая Азия видела их,  с  бритыми  головами  и  длинными  чубами, предававшими  мечу  и  огню  цветущие  берега   ее;   видела   чалмы   своих магометанских обитателей раскиданными, подобно ее  бесчисленным  цветам,  на смоченных кровию полях и плававшими у берегов."], "sections": ["Разделяйся же на три кучи и становись на три дороги  перед  тремя  воротами."], "lat": 39.0, "lon": 35.0, "geocoded": true}, {"entity_text": "Московия", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["Появление  иностранных  графов  и  баронов  было  в   Польше   довольно обыкновенно: они часто были завлекаемы единственно  любопытством  посмотреть этот почти полуазиатский угол Европы: Московию и Украйну  они  почитали  уже находящимися в Азии."], "sections": ["Разделяйся же на три кучи и становись на три дороги  перед  тремя  воротами."], "lat": 55.75, "lon": 37.62, "geocoded": true}, {"entity_text": "Натолий", "fictional_type": "fictional_pure", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["А по своему бедному разуму вот что я думаю: пустить с  челнами  одних молодых, пусть немного пошарпают берега Натолии."], "sections": [], "lat": 39.0, "lon": 35.0, "geocoded": true}, {"entity_text": "Незамайковский", "fictional_type": "fictional_pure", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["Тарас  видел  еще  издали,  что  беда  будет  всему  Незамайковскому  и Стебликивскому куреню, и вскрикнул зычно: \"Выбирайтесь скорей из-за возов, и садись всякий на коня!\""], "sections": ["Разделяйся же на три кучи и становись на три дороги  перед  тремя  воротами."], "lat": 47.83, "lon": 35.09, "geocoded": true}, {"entity_text": "Незамайковский курень", "fictional_type": "fictional_pure", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 3, "sentences": ["Захотели  остаться:  весь  почти  Незамайковский  курень, бо'льшая  половина  Поповичевского  куреня,  весь  Уманский   курень,   весь Каневский курень, бо'льшая половина Стебликивского куреня, бо'льшая половина Тымошевского куреня.", "Так, как будто и не бывало половины Незамайковского куреня!", "Уже обступили Кукубенка, уже  семь  человек  только  осталось  изо  всего  Незамайковского куреня; уже и те отбиваются через силу; уже окровавилась на нем одежда."], "sections": ["Разделяйся же на три кучи и становись на три дороги  перед  тремя  воротами."], "lat": 47.83, "lon": 35.09, "geocoded": true}, {"entity_text": "Неметчина", "fictional_type": "fictional_pure", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["Теперь  строят везде крепости и замки; из Неметчины приехали французские инженеры, а потому по дорогам везут много кирпичу и камней."], "sections": ["Разделяйся же на три кучи и становись на три дороги  перед  тремя  воротами."], "lat": 51.17, "lon": 10.45, "geocoded": true}, {"entity_text": "Немиров", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["Не  одна  останется  вдова  в  Глухове,  Немирове, Чернигове и других городах."], "sections": ["Разделяйся же на три кучи и становись на три дороги  перед  тремя  воротами."], "lat": 48.97, "lon": 28.85, "geocoded": true}, {"entity_text": "Новороссия", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["Тогда  весь  юг,  все  то пространство, которое составляет  нынешнюю  Новороссию,  до  самого  Черного моря, было зеленою,  девственною  пустынею."], "sections": [], "lat": 47.0, "lon": 37.0, "geocoded": true}, {"entity_text": "Перекоп", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["Из Сечи пришла весть, что татары во время отлучки козаков ограбили  в ней все, вырыли скарб, который втайне держали козаки под  землею,  избили  и забрали в плен всех, которые оставались, и со  всеми  забранными  стадами  и табунами  направили  путь  прямо  к  Перекопу."], "sections": ["Разделяйся же на три кучи и становись на три дороги  перед  тремя  воротами."], "lat": 46.16, "lon": 33.73, "geocoded": true}, {"entity_text": "Переяслава", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["Отвсюду  поднялись  козаки:  от   Чигирина,   от Переяслава, от Батурина, от Глухова, от низовой  стороны  днепровской  и  от всех его верховий и островов."], "sections": ["Часть военных всадников бросилась заботливо рассматривать толпы народа."], "lat": 50.07, "lon": 31.45, "geocoded": true}, {"entity_text": "Переяславский", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["Куренные атаманы, перегляди  всякий  курень  свой:  у  кого недочет, пополни его останками Переяславского."], "sections": ["Разделяйся же на три кучи и становись на три дороги  перед  тремя  воротами."], "lat": 50.07, "lon": 31.45, "geocoded": true}, {"entity_text": "Переяславский курень", "fictional_type": "fictional_pure", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["Потом  уже оказалось, что весь Переяславский  курень,  расположившийся  перед  боковыми городскими воротами, был пьян мертвецки; стало быть,  дивиться  нечего,  что половина была перебита, а другая перевязана прежде, чем все могли узнать,  в чем дело."], "sections": [], "lat": 50.07, "lon": 31.45, "geocoded": true}, {"entity_text": "Печерица", "fictional_type": "fictional_pure", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["Остап  и  Андрий  слышали  только приветствия: \"А, это ты, Печерица!"], "sections": [], "lat": 50.43, "lon": 30.54, "geocoded": true}, {"entity_text": "Покров", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["И мало того что прибыли безбедно на Сечу, привезли еще златошвейную ризу архимандриту Межигорского киевского  монастыря  и  на  Покров,  что  на Запорожье, оклад из  чистого  серебра."], "sections": ["Разделяйся же на три кучи и становись на три дороги  перед  тремя  воротами."], "lat": 48.26, "lon": 33.48, "geocoded": true}, {"entity_text": "Полонное", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["В  летописных  страницах  изображено  подробно,  как  бежали   польские гарнизоны  из  освобождаемых  городов;  как  были  перевешаны   бессовестные арендаторы-жиды;  как  слаб  был  коронный  гетьман   Николай   Потоцкий   с многочисленною своею армиею против этой непреодолимой силы;  как,  разбитый, преследуемый, перетопил он в небольшой речке лучшую часть своего войска; как облегли его в небольшом местечке Полонном  грозные  козацкие  полки  и  как, приведенный  в  крайность,  польский   гетьман   клятвенно   обещал   полное удовлетворение во всем со стороны короля и государственных чинов и возвращение всех прежних  прав  и  преимуществ."], "sections": ["Часть военных всадников бросилась заботливо рассматривать толпы народа."], "lat": 50.18, "lon": 27.51, "geocoded": true}, {"entity_text": "Польша", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 6, "sentences": ["Тогда влияние Польши  начинало  уже  оказываться  на  русском  дворянстве.", "Теперь уже  все  хотели  в  поход,  и  старые  и молодые; все, с совета всех старшин,  куренных,  кошевого  и  с  воли  всего запорожского войска, положили идти прямо на Польшу, отмстить за  все  зло  и посрамленье веры и козацкой славы, набрать добычи с городов, зажечь пожар по деревням и хлебам, пустить  далеко  по  степи  о  себе  славу.", "Площадь обступали кругом небольшие каменные и глиняные, в  один этаж, домы с видными в стенах  деревянными  сваями  и  столбами  во  всю  их высоту, косвенно перекрещенные деревянными же брусьями, как  вообще  строили домы тогдашние обыватели, что можно видеть и поныне еще в  некоторых  местах Литвы  и  Польши."], "sections": [], "lat": 52.07, "lon": 19.48, "geocoded": true}, {"entity_text": "Поповичевский", "fictional_type": "fictional_pure", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["Один  за  другим  валили  курени:  Уманский, Поповичевский,   Каневский,   Стебликивский,    Незамайковский,    Гургузив, Тытаревский, Тымошевский."], "sections": ["Разделяйся же на три кучи и становись на три дороги  перед  тремя  воротами."], "lat": 50.07, "lon": 31.45, "geocoded": true}, {"entity_text": "Поповичевский курень", "fictional_type": "fictional_pure", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["Захотели  остаться:  весь  почти  Незамайковский  курень, бо'льшая  половина  Поповичевского  куреня,  весь  Уманский   курень,   весь Каневский курень, бо'льшая половина Стебликивского куреня, бо'льшая половина Тымошевского куреня."], "sections": ["Разделяйся же на три кучи и становись на три дороги  перед  тремя  воротами."], "lat": 50.07, "lon": 31.45, "geocoded": true}, {"entity_text": "Римский республика", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["Здесь были все бурсаки, не вытерпевшие академических лоз и  не  вынесшие  из школы ни одной буквы; но вместе с ними здесь были и те, которые  знали,  что такое Гораций, Цицерон и Римская республика."], "sections": [], "lat": 41.9, "lon": 12.5, "geocoded": true}, {"entity_text": "Россия", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 2, "sentences": ["Это был один из тех характеров, которые могли возникнуть только в тяжелый ХV век на полукочующем углу  Европы,  когда  вся южная первобытная Россия,  оставленная  своими  князьями,  была  опустошена, выжжена дотла неукротимыми набегами монгольских хищников;  когда,  лишившись дома и кровли, стал здесь  отважен  человек;  когда  на  пожарищах,  в  виду грозных соседей и вечной опасности, селился он и привыкал глядеть им прямо в очи, разучившись знать, существует ли какая боязнь на свете;  когда  бранным пламенем объялся древле  мирный  славянский  дух  и  завелось  козачество  - широкая,  разгульная  замашка  русской  природы,  -  и  когда  все  поречья, перевозы, прибрежные пологие и удобные места усеялись  козаками,  которым  и счету никто не ведал, и смелые товарищи их  были  вправе  отвечать  султану, пожелавшему знать о числе их: \"Кто их знает!", "И  витязи,  собравшиеся  со  всего разгульного мира восточной  России,  целовались  взаимно;  и  тут  понеслись вопросы: \"А что Касьян?"], "sections": [], "lat": 61.52, "lon": 105.32, "geocoded": true}, {"entity_text": "Русский", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["Пусть же цветет вечно Русская  земля!..\""], "sections": ["Разделяйся же на три кучи и становись на три дороги  перед  тремя  воротами."], "lat": 55.75, "lon": 37.62, "geocoded": true}, {"entity_text": "Русский земля", "fictional_type": "fictional_pure", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 9, "sentences": ["чтобы  попустить  такие мучения на Русской земле от проклятых недоверков!", "Бывали и в других землях товарищи, но таких, как в  Русской  земле, не было таких товарищей.", "Пусть же знают они все, что такое значит в Русской земле товарищество!"], "sections": [], "lat": 55.75, "lon": 37.62, "geocoded": true}, {"entity_text": "Сеча", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 16, "sentences": ["Есаулу Товкачу передал свою власть вместе с крепким наказом явиться сей же  час  со всем полком, если только он подаст из Сечи какую-нибудь весть.", "Он  думал  о том, кого он встретит на Сечи из своих  прежних  сотоварищей.", "Молодые сыны его тоже осмотрели  себя  с  ног  до  головы  с  каким-то страхом и неопределенным удовольствием, - и все вместе въехали в предместье, находившееся  за  полверсты  от  Сечи."], "sections": [], "lat": 47.83, "lon": 35.09, "geocoded": true}, {"entity_text": "Сечие", "fictional_type": "fictional_pure", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["А между тем  в  народе  стали  попадаться  и  степенные,  уваженные  по заслугам всею Сечью, седые, старые чубы, бывавшие не раз  старшинами."], "sections": [], "lat": 47.83, "lon": 35.09, "geocoded": true}, {"entity_text": "Сечь", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 16, "sentences": ["На  Сечь  их  скоро  пошлю\".", "Теперь он тешил себя заранее мыслью, как он явится  с  двумя  сыновьями своими на Сечь и скажет: \"Вот посмотрите, каких я молодцов привел к вам!", "Козаки сошли с коней своих, взошли на паром и чрез три  часа  плавания  были уже у берегов острова Хортицы, где была тогда Сечь, так  часто  переменявшая свое жилище."], "sections": [], "lat": 47.83, "lon": 35.09, "geocoded": true}, {"entity_text": "Смирна", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["В подобных случаях водилось у запорожцев  гнаться  в  ту  ж  минуту  за похитителями, стараясь настигнуть их на дороге, потому что пленные  как  раз могли очутиться на базарах Малой Азии, в Смирне, на Критском острове, и  бог знает в каких местах не показались бы чубатые запорожские головы."], "sections": ["Разделяйся же на три кучи и становись на три дороги  перед  тремя  воротами."], "lat": 38.41, "lon": 27.14, "geocoded": true}, {"entity_text": "Стебликивский курень", "fictional_type": "fictional_pure", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 2, "sentences": ["Захотели  остаться:  весь  почти  Незамайковский  курень, бо'льшая  половина  Поповичевского  куреня,  весь  Уманский   курень,   весь Каневский курень, бо'льшая половина Стебликивского куреня, бо'льшая половина Тымошевского куреня.", "Тарас  видел  еще  издали,  что  беда  будет  всему  Незамайковскому  и Стебликивскому куреню, и вскрикнул зычно: \"Выбирайтесь скорей из-за возов, и садись всякий на коня!\""], "sections": ["Разделяйся же на три кучи и становись на три дороги  перед  тремя  воротами."], "lat": 50.07, "lon": 31.45, "geocoded": true}, {"entity_text": "Татарва", "fictional_type": "fictional_pure", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 2, "sentences": ["Можно пойти на Турещину или на Татарву.", "-Не можно ни в Турещину, ни в Татарву, - отвечал кошевой, взявши  опять хладнокровно в рот свою трубку."], "sections": [], "lat": 47.83, "lon": 35.09, "geocoded": true}, {"entity_text": "Татарка", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["Они прискакали к небольшой речке,  называвшейся  Татаркою,  впадающей  в  Днепр, кинулись в воду с конями своими и долго плыли  по  ней."], "sections": [], "lat": 47.83, "lon": 35.09, "geocoded": true}, {"entity_text": "Толопать", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["И  слышал только в ответ Тарас  Бульба,  что  Бородавка  повешен  в  Толопане,  что  с Колопера содрали кожу под Кизикирменом, что  Пидсышкова  голова  посолена  в бочке и  отправлена  в  самый  Царьград."], "sections": [], "lat": 47.83, "lon": 35.09, "geocoded": true}, {"entity_text": "Турещина", "fictional_type": "fictional_pure", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 2, "sentences": ["Можно пойти на Турещину или на Татарву.", "-Не можно ни в Турещину, ни в Татарву, - отвечал кошевой, взявши  опять хладнокровно в рот свою трубку."], "sections": [], "lat": 39.92, "lon": 32.85, "geocoded": true}, {"entity_text": "Тымошевский курень", "fictional_type": "fictional_pure", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 2, "sentences": ["Тытаревский и Тымошевский курень на запас,  с  правого  бока  обоза!", "Захотели  остаться:  весь  почти  Незамайковский  курень, бо'льшая  половина  Поповичевского  куреня,  весь  Уманский   курень,   весь Каневский курень, бо'льшая половина Стебликивского куреня, бо'льшая половина Тымошевского куреня."], "sections": ["Разделяйся же на три кучи и становись на три дороги  перед  тремя  воротами."], "lat": 50.07, "lon": 31.45, "geocoded": true}, {"entity_text": "Тытаревский", "fictional_type": "fictional_pure", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["Тытаревский и Тымошевский курень на запас,  с  правого  бока  обоза!"], "sections": ["Разделяйся же на три кучи и становись на три дороги  перед  тремя  воротами."], "lat": 47.83, "lon": 35.09, "geocoded": true}, {"entity_text": "Украйна", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 4, "sentences": ["Вот  откуда  разливается воля и козачество на всю Украйну!", "Хоть неживого, а довезу тебя до Украйны!", "Появление  иностранных  графов  и  баронов  было  в   Польше   довольно обыкновенно: они часто были завлекаемы единственно  любопытством  посмотреть этот почти полуазиатский угол Европы: Московию и Украйну  они  почитали  уже находящимися в Азии."], "sections": [], "lat": 49.0, "lon": 32.0, "geocoded": true}, {"entity_text": "Украйне", "fictional_type": "fictional_pure", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 6, "sentences": ["Светлица была убрана во вкусе того времени, о котором живые  намеки остались только в песнях да в народных  думах,  уже  не  поющихся  более  на Украйне  бородатыми  старцами-слепцами  в  сопровождении  тихого  треньканья бандуры, в виду  обступившего  народа;  во  вкусе  того  бранного,  трудного времени, когда начались разыгрываться схватки и битвы на  Украйне  за  унию.", "Светлица была убрана во вкусе того времени, о котором живые  намеки остались только в песнях да в народных  думах,  уже  не  поющихся  более  на Украйне  бородатыми  старцами-слепцами  в  сопровождении  тихого  треньканья бандуры, в виду  обступившего  народа;  во  вкусе  того  бранного,  трудного времени, когда начались разыгрываться схватки и битвы на  Украйне  за  унию.", "еще не то  расскажу:  и  ксендзы  ездят  теперь  по  всей Украйне в таратайках."], "sections": [], "lat": 49.0, "lon": 32.0, "geocoded": true}, {"entity_text": "Уманский", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["Один  за  другим  валили  курени:  Уманский, Поповичевский,   Каневский,   Стебликивский,    Незамайковский,    Гургузив, Тытаревский, Тымошевский."], "sections": ["Разделяйся же на три кучи и становись на три дороги  перед  тремя  воротами."], "lat": 48.74, "lon": 30.22, "geocoded": true}, {"entity_text": "Уманский курень", "fictional_type": "fictional_pure", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 2, "sentences": ["Остап тут  же,  у  его  же седла, отвязал шелковый шнур, который возил с  собою  хорунжий  для  вязания пленных, и его же шнуром связал его по рукам  и  по  ногам,  прицепил  конец веревки к седлу и  поволок  его  через  поле,  сзывая  громко  всех  козаков Уманского куреня, чтобы шли отдать последнюю честь атаману.", "Захотели  остаться:  весь  почти  Незамайковский  курень, бо'льшая  половина  Поповичевского  куреня,  весь  Уманский   курень,   весь Каневский курень, бо'льшая половина Стебликивского куреня, бо'льшая половина Тымошевского куреня."], "sections": ["Разделяйся же на три кучи и становись на три дороги  перед  тремя  воротами."], "lat": 48.74, "lon": 30.22, "geocoded": true}, {"entity_text": "Умань", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 2, "sentences": ["И через неделю уже очутился он в городе  Умани,  вооруженный,  на коне, с копьем, саблей,  дорожной  баклагой  у  седла,  походным  горшком  с саламатой, пороховыми патронами, лошадиными путами  и  прочим  снарядом.", "И через час воз с кирпичом выехал из Умани, запряженный в две клячи."], "sections": ["Разделяйся же на три кучи и становись на три дороги  перед  тремя  воротами."], "lat": 48.74, "lon": 30.22, "geocoded": true}, {"entity_text": "Хортица", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["Козаки сошли с коней своих, взошли на паром и чрез три  часа  плавания  были уже у берегов острова Хортицы, где была тогда Сечь, так  часто  переменявшая свое жилище."], "sections": [], "lat": 47.83, "lon": 35.09, "geocoded": true}, {"entity_text": "Царьград", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 2, "sentences": ["И  слышал только в ответ Тарас  Бульба,  что  Бородавка  повешен  в  Толопане,  что  с Колопера содрали кожу под Кизикирменом, что  Пидсышкова  голова  посолена  в бочке и  отправлена  в  самый  Царьград.", "Вы слышали от отцов и дедов, в какой чести у всех была  земля  наша:  и  грекам дала знать себя, и с Царьграда брала  червонцы,  и  города  были  пышные,  и храмы, и князья, князья  русского  рода,  свои  князья,  а  не  католические недоверки."], "sections": [], "lat": 41.01, "lon": 28.97, "geocoded": true}, {"entity_text": "Чернигов", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["Не  одна  останется  вдова  в  Глухове,  Немирове, Чернигове и других городах."], "sections": ["Разделяйся же на три кучи и становись на три дороги  перед  тремя  воротами."], "lat": 51.5, "lon": 31.3, "geocoded": true}, {"entity_text": "Чигирин", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["Отвсюду  поднялись  козаки:  от   Чигирина,   от Переяслава, от Батурина, от Глухова, от низовой  стороны  днепровской  и  от всех его верховий и островов."], "sections": ["Часть военных всадников бросилась заботливо рассматривать толпы народа."], "lat": 49.07, "lon": 32.66, "geocoded": true}, {"entity_text": "Чёрный море", "fictional_type": "fictional_pure", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 4, "sentences": ["Бурсаки  вдруг  преобразились:  на  них  явились,  вместо прежних запачканных сапогов, сафьянные  красные,  с  серебряными  подковами; шаровары шириною в Черное море, с тысячью складок и со сборами, перетянулись золотым очкуром; к очкуру прицеплены  были  длинные  ремешки,  с  кистями  и прочими побрякушками, для трубки.", "Тогда  весь  юг,  все  то пространство, которое составляет  нынешнюю  Новороссию,  до  самого  Черного моря, было зеленою,  девственною  пустынею.", "Все были хожалые, езжалые: ходили по анатольским берегам, по  крымским  солончакам  и степям, по всем речкам большим и малым, которые впадали  в  Днепр,  по  всем заходам и днепровским островам; бывали в молдавской, волошской,  в  турецкой земле; изъездили все Черное море двухрульными козацкими челнами; нападали  в пятьдесят челнов в ряд на богатейшие и превысокие корабли, перетопили немало турецких галер и много-много выстреляли пороху на своем веку."], "sections": [], "lat": 43.0, "lon": 35.0, "geocoded": true}, {"entity_text": "Шклов", "fictional_type": "real", "source_type": "work", "work_title": "Тарас Бульба", "year": null, "count": 1, "sentences": ["Хоть у него есть и хутора, и усадьбы, и четыре замка, и степовой земли до самого Шклова, а грошей у  него так, как у козака, -  ничего  нет."], "sections": ["Разделяйся же на три кучи и становись на три дороги  перед  тремя  воротами."], "lat": 54.2, "lon": 30.3, "geocoded": true}]};
+
+const AUTHORS = {
+  gogol: {
+    label: 'Гоголь Н.В.',
+    biography: GOGOL.biography,
+    works: {
+      'Шинель':     GOGOL['Шинель'],
+      'Тарас Бульба': GOGOL['Тарас Бульба'],
+    }
+  }
+};
+
+// State
+let curAuthor = 'gogol';
+let curMode   = null;   // 'bio' | 'work'
+let curWork   = 'Шинель';
+let curFilter = 'all';
+let searchQ   = '';
+let entities  = [];     // текущий набор
+let markers   = {};     // name → L.marker
+let routeLines= [];
+let selectedE = null;
+
+// Map
+const map = L.map('map', {center:[50,28],zoom:5});
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+  {attribution:'© OpenStreetMap © CARTO',maxZoom:19}).addTo(map);
+
+function mkIcon(color, size=24){
+  const h=Math.round(size*4/3);
+  return L.divIcon({className:'',
+    html:`<svg width="${size}" height="${h}" viewBox="0 0 24 32" xmlns="http://www.w3.org/2000/svg">
+      <path d="M12 0C5.37 0 0 5.37 0 12c0 8.25 12 20 12 20S24 20.25 24 12C24 5.37 18.63 0 12 0z" fill="${color}" opacity="0.88"/>
+      <circle cx="12" cy="12" r="4.2" fill="white" opacity="0.9"/></svg>`,
+    iconSize:[size,h],iconAnchor:[size/2,h],popupAnchor:[0,-h-2]});
+}
+const ICONS = {
+  real: mkIcon('#4a6741'),
+  fict: mkIcon('#6b4f8a'),
+  bio:  mkIcon('#9b3a2a'),
+};
+function getIcon(e){
+  if(e.isBio) return ICONS.bio;
+  return e.fictional_type==='real' ? ICONS.real : ICONS.fict;
+}
+
+// Author / mode switching
+function onAuthorChange(){
+  curAuthor = document.getElementById('authorSel').value;
+  if(!curAuthor) return;
+  curMode = null;
+  document.getElementById('tabBio').className='mtab';
+  document.getElementById('tabWork').className='mtab';
+  document.getElementById('workSec').style.display='none';
+  clearAll();
+  entities=[];
+  renderList();
+}
+
+function setMode(mode){
+  if(!curAuthor) return;
+  curMode = mode;
+  document.getElementById('tabBio').className  = 'mtab'+(mode==='bio' ?' abio':'');
+  document.getElementById('tabWork').className = 'mtab'+(mode==='work'?' awork':'');
+  document.getElementById('workSec').style.display = mode==='work'?'block':'none';
+  loadAndRender();
+}
+
+function onWorkChange(){
+  curWork = document.getElementById('workSel').value;
+  loadAndRender();
+}
+
+function loadAndRender(){
+  if(!curAuthor||!curMode){entities=[];renderList();return;}
+  const auth = AUTHORS[curAuthor];
+  let raw = [];
+  if(curMode==='bio'){
+    raw = auth.biography;
+  } else {
+    raw = auth.works[curWork]||[];
+  }
+  entities = raw.map(r=>({
+    text:          r.entity_text,
+    fictional_type:r.fictional_type,
+    isBio:         r.source_type==='biography',
+    year:          r.year||null,
+    count:         r.count||1,
+    sentences:     r.sentences||[],
+    lat:           r.lat||null,
+    lon:           r.lon||null,
+  }));
+  clearAll();
+  placeAllMarkers();
+  renderList();
+  updateStats();
+  fitMapToMarkers();
+}
+
+// Place markers for all entities
+function placeAllMarkers(){
+  entities.forEach(e=>{
+    if(!e.lat||!e.lon) return;
+    const icon = getIcon(e);
+    const ftL  = e.isBio ? '📍 Биографический'
+               : e.fictional_type==='real' ? '🟢 Существующий' : '🟣 Вымышленный';
+    const sent = (e.sentences[0]||'').trim();
+    const yearStr = e.year ? ` · ${e.year} г.` : '';
+    const popup = `<div class="ptitle">${esc(e.text)}</div>
+      <div class="pmeta">${e.isBio?'биография':'произведение'}${yearStr} · ${e.count}×</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:0.59rem;margin-bottom:0.2rem;">${ftL}</div>
+      ${sent?`<div class="psent">${esc(sent.length>185?sent.slice(0,185)+'…':sent)}</div>`:''}`;
+    const m = L.marker([e.lat,e.lon],{icon})
+      .addTo(map)
+      .bindPopup(popup);
+    m.on('click',()=>highlightEntity(e));
+    markers[e.text]=m;
+  });
+  redrawRoutes();
+}
+
+function fitMapToMarkers(){
+  const pts = entities.filter(e=>e.lat&&e.lon).map(e=>[e.lat,e.lon]);
+  if(pts.length) map.fitBounds(pts,{padding:[40,40],maxZoom:10});
+}
+
+function clearAll(){
+  Object.values(markers).forEach(m=>map.removeLayer(m));
+  markers={};
+  routeLines.forEach(l=>map.removeLayer(l));
+  routeLines=[];
+  selectedE=null;
+}
+
+// Chronological route (biography)
+function redrawRoutes(){
+  routeLines.forEach(l=>map.removeLayer(l));
+  routeLines=[];
+  if(curMode!=='bio') return;
+
+  // Сортируем по году; у которых нет года — пропускаем
+  const pts = entities
+    .filter(e=>e.isBio&&e.lat&&e.year)
+    .sort((a,b)=>parseInt(a.year)-parseInt(b.year));
+
+  for(let i=0;i<pts.length-1;i++){
+    // Линия
+    const line = L.polyline(
+      [[pts[i].lat,pts[i].lon],[pts[i+1].lat,pts[i+1].lon]],
+      {color:'#9b3a2a',weight:2,dashArray:'7 4',opacity:0.8}
+    ).addTo(map);
+    routeLines.push(line);
+
+    // Стрелка-декоратор: рисуем маленький треугольник в середине линии
+    const midLat = (pts[i].lat+pts[i+1].lat)/2;
+    const midLon = (pts[i].lon+pts[i+1].lon)/2;
+    const arrowIcon = L.divIcon({
+      className:'',
+      html:`<div style="color:#9b3a2a;font-size:14px;font-weight:bold;line-height:1;transform:rotate(${bearing(pts[i],pts[i+1])}deg)">▶</div>`,
+      iconSize:[14,14],iconAnchor:[7,7]
+    });
+    const arrowMarker = L.marker([midLat,midLon],{icon:arrowIcon,interactive:false}).addTo(map);
+    routeLines.push(arrowMarker);
+  }
+}
+
+function bearing(from, to){
+  const dLon = (to.lon - from.lon) * Math.PI/180;
+  const lat1  = from.lat * Math.PI/180;
+  const lat2  = to.lat   * Math.PI/180;
+  const x = Math.sin(dLon)*Math.cos(lat2);
+  const y = Math.cos(lat1)*Math.sin(lat2) - Math.sin(lat1)*Math.cos(lat2)*Math.cos(dLon);
+  return Math.round(Math.atan2(x,y)*180/Math.PI);
+}
+
+// Highlight entity
+function highlightEntity(e){
+  // Подсветить в списке
+  selectedE = e;
+  renderList();
+}
+
+// Filters
+document.getElementById('filterRow').addEventListener('click',ev=>{
+  const btn=ev.target.closest('.fb');
+  if(!btn) return;
+  document.querySelectorAll('.fb').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  curFilter=btn.dataset.f;
+  renderList();
+  updateStats();
+  // Показать/скрыть маркеры
+  entities.forEach(e=>{
+    const m=markers[e.text];
+    if(!m) return;
+    const show = curFilter==='all'
+      || (curFilter==='real'&&e.fictional_type==='real')
+      || (curFilter==='fictional_pure'&&e.fictional_type==='fictional_pure');
+    if(show) m.addTo(map); else map.removeLayer(m);
+  });
+});
+
+document.getElementById('searchBox').addEventListener('input',ev=>{
+  searchQ=ev.target.value; renderList();
+});
+
+// Render list
+function getFiltered(){
+  return entities.filter(e=>{
+    if(curFilter==='real'&&e.fictional_type!=='real') return false;
+    if(curFilter==='fictional_pure'&&e.fictional_type!=='fictional_pure') return false;
+    if(searchQ&&!e.text.toLowerCase().includes(searchQ.toLowerCase())) return false;
+    return true;
+  });
+}
+
+function renderList(){
+  const list=document.getElementById('entityList');
+  if(!curMode){list.innerHTML='<div class="empty">Выберите раздел</div>';return;}
+  const f=getFiltered();
+  if(!f.length){list.innerHTML='<div class="empty">Ничего не найдено</div>';return;}
+  list.innerHTML=f.map(e=>{
+    const isActive=(selectedE&&selectedE.text===e.text);
+    const typeTag = e.isBio
+      ? '<span class="tag tbio">биография</span>'
+      : e.fictional_type==='real'
+        ? '<span class="tag treal">существующий</span>'
+        : '<span class="tag tfict">вымышленный</span>';
+    const sent=(e.sentences[0]||'').trim();
+    const prev=sent.length>100?sent.slice(0,100)+'…':sent;
+    return `<div class="eitem${isActive?' active':''}" onclick="onItemClick('${escJ(e.text)}')">
+      <div class="ename">${esc(e.text)}</div>
+      <div class="emeta">
+        ${typeTag}
+        ${e.year?`<span class="tag tyear">${e.year} г.</span>`:''}
+        <span class="tcnt">${e.count}×</span>
+      </div>
+      ${prev?`<div class="esent">${esc(prev)}</div>`:''}
+    </div>`;
+  }).join('');
+}
+
+function onItemClick(text){
+  const e=entities.find(x=>x.text===text);
+  if(!e) return;
+  selectedE=e;
+  renderList();
+  if(e.lat&&e.lon){
+    map.flyTo([e.lat,e.lon],Math.max(map.getZoom(),8),{duration:0.7});
+    const m=markers[e.text];
+    if(m) setTimeout(()=>m.openPopup(),750);
+  }
+}
+
+function updateStats(){
+  const f=getFiltered();
+  document.getElementById('sTotal').textContent = f.length;
+  document.getElementById('sReal').textContent  = f.filter(e=>e.fictional_type==='real').length;
+  document.getElementById('sFict').textContent  = f.filter(e=>e.fictional_type==='fictional_pure').length;
+}
+
+// Helpers
+function esc(s=''){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function escJ(s=''){return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");}
+</script>
+</body>
+</html>
