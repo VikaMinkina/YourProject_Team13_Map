@@ -169,9 +169,9 @@ header h1{font-size:1.35rem;font-weight:600;letter-spacing:0.03em;}
       </div>
       <div class="mod-filter" id="modFilter">
         <button class="mod-filter-btn active" data-mod="all" onclick="setModFilter('all')">Все</button>
-        <button class="mod-filter-btn" data-mod="pending" onclick="setModFilter('pending')">⏳ На проверке</button>
-        <button class="mod-filter-btn" data-mod="approved" onclick="setModFilter('approved')">✓ Одобренные</button>
-        <button class="mod-filter-btn" data-mod="rejected" onclick="setModFilter('rejected')">✗ Отклоненные</button>
+        <button class="mod-filter-btn" data-mod="pending" onclick="setModFilter('pending')">На проверке</button>
+        <button class="mod-filter-btn" data-mod="approved" onclick="setModFilter('approved')">Одобренные</button>
+        <button class="mod-filter-btn" data-mod="rejected" onclick="setModFilter('rejected')">Отклоненные</button>
       </div>
     </div>
 
@@ -592,9 +592,9 @@ function renderList(){
     let statusTag = '';
     if(e.isUser){
       const status = e.moderationStatus || 'pending';
-      if(status === 'approved') statusTag = '<span class="tag tapproved">✓ одобрен</span>';
-      else if(status === 'rejected') statusTag = '<span class="tag trejected">✗ отклонен</span>';
-      else statusTag = '<span class="tag tpending">⏳ на проверке</span>';
+      if(status === 'approved') statusTag = '<span class="tag tapproved">одобрен</span>';
+      else if(status === 'rejected') statusTag = '<span class="tag trejected">отклонен</span>';
+      else statusTag = '<span class="tag tpending">на проверке</span>';
       typeTag = '<span class="tag tuser">пользоват.</span>';
     } else {
       typeTag = e.isBio
